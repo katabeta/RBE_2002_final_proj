@@ -57,14 +57,18 @@ float offset;
 unsigned long dead_straight_time;
 //state machine
 state cur_state;
-//const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
-LiquidCrystal lcd(40, 41, 42, 43, 44, 45);
+
+const int rs = 40, en = 41, d4 = 37, d5 = 35, d6 = 33, d7 = 31;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
 
 void setup() {
 
 	Serial.begin(9600);
-	lcd.begin(16,2);
-	lcd.print("hi");
+	// set up the LCD's number of columns and rows:
+	lcd.begin(16, 2);
+	// Print a message to the LCD.
+	lcd.print("hello, world!");
 	delay(100);
 	// Serial.setTimeout(500);
 	pinMode(relay_en, OUTPUT);
@@ -86,24 +90,25 @@ void setup() {
 	pinMode(RIGHT_A, OUTPUT);
 	pinMode(RIGHT_B, OUTPUT);
 	rMotor = new PMotor(LEFT_A, LEFT_B);
-	lMotor=new PMotor(RIGHT_A, RIGHT_B);
-	Serial.println("Orientation Sensor Test"); Serial.println("");
-	  /* Initialise the sensor */
-	  while(!bno.begin())
-	  {
-	    /* There was a problem detecting the BNO055 ... check your connections */
-	    Serial.println("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-	  }
-	  delay(1000);
-	  bno.setExtCrystalUse(true);
+	lMotor = new PMotor(RIGHT_A, RIGHT_B);
+	Serial.println("Orientation Sensor Test");
+	Serial.println("");
+	/* Initialise the sensor */
+	while (!bno.begin()) {
+		/* There was a problem detecting the BNO055 ... check your connections */
+		Serial.println(
+				"Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+	}
+	delay(1000);
+	bno.setExtCrystalUse(true);
 	for (int i = 0; i < 15; i++) {
 		sensors_event_t event;
 		bno.getEvent(&event);
 		offset = event.orientation.x;
 		delay(100);
 	}
-	set_point=0;
-	cur_state=straight;
+	set_point = 0;
+	cur_state = straight;
 }
 
 void pan_fan() {

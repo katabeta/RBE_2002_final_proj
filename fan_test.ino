@@ -27,6 +27,7 @@
 #define WALL_TOL 5
 #define TURN_SPEED .3
 #define STRAIGHT_SPEED .2
+#define CORRECTION_SPEED .13
 
 //test
 const int escPin = 4;
@@ -54,7 +55,7 @@ bool rotate=true, increasing=true;
 float set_point=0;
 float offset;
 //state machine
-state cur_state=prep_right;
+state cur_state=straight;
 //const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(40, 41, 42, 43, 44, 45);
 
@@ -222,24 +223,48 @@ void loop() {
 	delay(10);
 
 }
-void drive_straight(){
-	sensors_event_t event;
-	bno.getEvent(&event);
-	const float gain=.01, base_speed=.2;
-	float error = event.gyro.x-set_point;
-	float drive_speed=error*gain;
-	Serial.print("X: ");
-	Serial.print(event.gyro.x, 4);
-	Serial.print(" drive speed: ");
-	Serial.println(drive_speed);
-	if(abs(drive_speed)>.05){
-		lMotor->drive(base_speed+drive_speed);
-		rMotor->drive(base_speed-drive_speed);
+void drive_straight() {
+	float relative_heading = get_relative_heading();
+	const float allowable_error = 3; //may need to be 5
+	Serial.print("setpoint: ");
+	Serial.print(set_point);
+	Serial.print(" relative_heading: ");
+	Serial.print(relative_heading);
+	Serial.print(" error: ");
+	Serial.println(abs(relative_heading - set_point), 4);
+	if(set_point==0){
+		if(relative_heading<=180&&relative_heading!=0){
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+			Serial.println("rotating left");
+		}
+		else if(relative_heading>180){
+			lMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+			rMotor->drive(TURN_SPEED);
+			Serial.println("rotating right");
+		}
+		else{
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(TURN_SPEED);
+		}
 	}
 	else{
-		lMotor->drive(base_speed+drive_speed);
-		rMotor->drive(base_speed-drive_speed);
+		if(relative_heading>set_point){
+			lMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+			rMotor->drive(TURN_SPEED);
+			Serial.println("rotating right");
+		}
+		else if(relative_heading<set_point){
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+			Serial.println("rotating left");
+		}
+		else{
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(TURN_SPEED);
+		}
 	}
+
 }
 //increases setpoint by 90 and wraps around to 0
 float increase_setpoint(){

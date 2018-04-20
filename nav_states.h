@@ -15,13 +15,14 @@ enum state{
 	left,
 	right,
 	see_fire,
+	init_await,
 	await
 };
 typedef enum state state;
 
 void drive_straight();
-float decrease_setpoint();
-float increase_setpoint();
+void decrease_setpoint();
+void increase_setpoint();
 bool turn_right();
 bool turn_left();
 float get_relative_heading();

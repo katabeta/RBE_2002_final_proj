@@ -9,8 +9,9 @@
 #define NAV_STATES_H_
 enum state{
 	straight,
-	prep_left,
-	prep_right,
+	dead_straight,
+	go_left,
+	go_right,
 	left,
 	right,
 	see_fire,

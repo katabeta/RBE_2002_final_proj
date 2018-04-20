@@ -24,7 +24,7 @@
 #define MAX_Z 750
 #define MIN_Z 300
 #define LOW_TOL 750
-#define WALL_TOL 5
+#define WALL_TOL 8
 #define TURN_SPEED .3
 #define STRAIGHT_SPEED .2
 #define CORRECTION_SPEED .13
@@ -52,10 +52,11 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55);
 bool rotate=true, increasing=true;
 
 //nav variables
-float set_point=0;
+float set_point;
 float offset;
+unsigned long dead_straight_time;
 //state machine
-state cur_state=straight;
+state cur_state;
 //const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(40, 41, 42, 43, 44, 45);
 
@@ -101,6 +102,8 @@ void setup() {
 		offset = event.orientation.x;
 		delay(100);
 	}
+	set_point=0;
+	cur_state=straight;
 }
 
 void pan_fan() {
@@ -144,16 +147,16 @@ void loop() {
 	// Wait for some input
 //	rMotor->drive(0);
 //	lMotor->drive(0);
-	sensors_event_t event;
-	bno.getEvent(&event);
-	/* Display the floating point data */
-	Serial.print("X: ");
-	Serial.print(event.orientation.x, 4);
-	Serial.print(" Y: ");
-	Serial.print(event.orientation.y, 4);
-	Serial.print(" Z: ");
-	Serial.print(event.orientation.z, 4);
-	Serial.print(" ");
+//	sensors_event_t event;
+//	bno.getEvent(&event);
+//	/* Display the floating point data */
+//	Serial.print("X: ");
+//	Serial.print(event.orientation.x, 4);
+//	Serial.print(" Y: ");
+//	Serial.print(event.orientation.y, 4);
+//	Serial.print(" Z: ");
+//	Serial.print(event.orientation.z, 4);
+//	Serial.print(" ");
 //	//delay(50);
 //	Serial.print("sonar f: ");
 //	Serial.print(sonar_f.ping_in());
@@ -178,21 +181,29 @@ void loop() {
 	switch(cur_state){
 	case straight:{
 		drive_straight();
-		Serial.println("driving straight");
+		Serial.print(" sonar right: ");
+		Serial.println(sonar_r.ping_in());
 		if(sonar_f.ping_in()<WALL_TOL){
 			//cur_state=left;
 		}
-		if(sonar_f.ping_in()<WALL_TOL){
-			//cur_state=right;
+		if(sonar_r.ping_in()<WALL_TOL*.75){
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(TURN_SPEED*1.5);
+		}
+		if(sonar_r.ping_in()>WALL_TOL*3){
+			cur_state=go_right;
 		}
 		break;
 	}
-	case prep_left:{
+	case go_left:{
 		decrease_setpoint();
 		cur_state=left;
 		break;
 	}
-	case prep_right:{
+	case go_right:{
+		lMotor->drive(TURN_SPEED);
+		rMotor->drive(TURN_SPEED);
+		delay(1200);
 		increase_setpoint();
 		cur_state=right;
 		break;
@@ -205,7 +216,18 @@ void loop() {
 	}
 	case right:{
 		if(turn_right()){
-			cur_state=await;
+			dead_straight_time=millis()+2000;
+			cur_state=dead_straight;
+			Serial.println("we;ve turned");
+		}
+		break;
+	}
+	case dead_straight:{
+		if(millis()<dead_straight_time){
+			drive_straight();
+		}
+		else{
+			cur_state=straight;
 		}
 		break;
 	}
@@ -215,7 +237,7 @@ void loop() {
 		break;
 	}
 	case await:{
-		Serial.println(get_relative_heading(),4);
+		//Serial.println(get_relative_heading(),4);
 		delay(100);
 		break;
 	}

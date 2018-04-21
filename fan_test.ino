@@ -22,8 +22,10 @@
 #define Z_ROT_POT 0
 #define Z_ROT 9
 #define Y_ROT 10
+//does a 120 degree sweep
+#define Z_RANGE 120
 #define MAX_Z 750
-#define MIN_Z 300
+#define MIN_Z 350
 ////// FIRE //////
 #define FLAME 3
 #define LOW_TOL 750
@@ -121,7 +123,7 @@ void setup() {
 		delay(100);
 	}
 	set_point = 0;
-	cur_state = straight;
+	cur_state = test;
 }
 
 void pan_fan() {
@@ -343,10 +345,19 @@ void loop() {
 //		lcd.setCursor(0, 1);
 //		lcd.print(sonar);
 //		delay(100);
+		lMotor->drive(0);
+		rMotor->drive(0);
+
 		break;
 	}
 	case test: {
-		pan_fan();
+		int rot=get_abs_turret_angle();
+		lcd.clear();
+		lcd.setCursor(0,0);
+		lcd.print(rot);
+		if(turn_to_angle(180-40)){
+			cur_state=await;
+		}
 		break;
 	}
 	}
@@ -355,6 +366,7 @@ void loop() {
 }
 //returns true when done
 bool turn_to_angle(float des_angle) {
+	//TODO figure out left turn and negative angles
 	float relative_heading = get_relative_heading();
 	if (des_angle == 0) {
 		if (relative_heading <= 180 && relative_heading != 0) {
@@ -424,6 +436,14 @@ void drive_straight() {
 		}
 	}
 
+}
+float get_abs_turret_angle(){
+	const float tick_to_angle =.3; //this is half the range/ticks
+	const int mid_point=485;
+	int turret_pos=analogRead(Z_ROT_POT);
+	int displacement = turret_pos-mid_point;
+	float angle = (float)displacement*tick_to_angle;
+	return angle;
 }
 //increases setpoint by 90 and wraps around to 0
 void increase_setpoint() {

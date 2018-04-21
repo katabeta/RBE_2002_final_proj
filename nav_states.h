@@ -28,5 +28,7 @@ void increase_setpoint();
 bool turn_right();
 bool turn_left();
 float get_relative_heading();
+float get_abs_turret_angle();
+bool turn_to_angle(float des_angle);
 
 #endif /* NAV_STATES_H_ */

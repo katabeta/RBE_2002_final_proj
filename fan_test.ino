@@ -9,26 +9,31 @@
 
 #include "nav_states.h"
 
-
+/////// Sonar //////
 #define TRIGGER_PIN  23
 #define ECHO_PIN     24
 #define MAX_DISTANCE 400
 #define TRIGGER_PIN_2 12
 #define ECHO_PIN_2 13
+////// Line Senors //////
 #define FRONT_LINE 1
 #define RIGHT_LINE 2
+////// Fan //////
 #define Z_ROT_POT 0
-#define FLAME 3
 #define Z_ROT 9
 #define Y_ROT 10
 #define MAX_Z 750
 #define MIN_Z 300
+////// FIRE //////
+#define FLAME 3
 #define LOW_TOL 750
 #define FLAME_TOL 400
+////// DRIVING //////
 #define WALL_TOL 4
-#define TURN_SPEED .3
+#define TURN_SPEED .2
 #define STRAIGHT_SPEED .2
 #define CORRECTION_SPEED .13
+
 namespace {
 
 const double RIGHT_CORRECT = .55;
@@ -38,7 +43,7 @@ const double LEFT_CORRECT = .45;
 
 //test
 const int escPin = 4;
-const int relay_en=22;
+const int relay_en = 22;
 const int minPulseRate = 1000;
 const int maxPulseRate = 2000;
 const int throttleChangeDelay = 100;
@@ -56,7 +61,7 @@ Servo esc, yServo;
 
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
-bool rotate=true, increasing=true;
+bool rotate = true, increasing = true;
 
 //nav variables
 float set_point;
@@ -67,7 +72,6 @@ state cur_state;
 
 const int rs = 40, en = 41, d4 = 37, d5 = 35, d6 = 33, d7 = 31;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-
 
 void setup() {
 
@@ -88,7 +92,7 @@ void setup() {
 	esc.attach(escPin, 1000, 2000);
 	yServo.attach(Y_ROT);
 	esc.write(0); //put the throttle to off
-	yServo.write(90);
+	yServo.write(80);
 	Serial.println("starting");
 	delay(1000); //let it register
 	Serial.println("fan should be beeping");
@@ -117,58 +121,74 @@ void setup() {
 		delay(100);
 	}
 	set_point = 0;
-	cur_state = await;
+	cur_state = straight;
 }
 
 void pan_fan() {
-	lcd.setCursor(0,0);
+	lcd.setCursor(0, 0);
 	lcd.clear();
-	int flame_val=analogRead(FLAME);
+	int flame_val = analogRead(FLAME);
+	int z_rot_val = analogRead(Z_ROT_POT);
 	lcd.print(flame_val);
 	if (rotate && increasing) {
-		analogWrite(Z_ROT, 100);     //turn left uncomment for analog
+		analogWrite(Z_ROT, 105);     //turn left uncomment for analog
 		Serial.println("increasing");
 	} else if (rotate && !increasing) {
 		analogWrite(Z_ROT, 200);     //turn right uncomment for analog
 		Serial.println(" decreasing");
 	}
 
-	if (analogRead(Z_ROT_POT) >= MAX_Z) {
+	if (z_rot_val >= MAX_Z) {
 		increasing = false;
-	} else if (analogRead(Z_ROT_POT) <= MIN_Z) {
+	} else if (z_rot_val <= MIN_Z) {
 		increasing = true;
 	}
-	if(flame_val<FLAME_TOL){
-		lcd.setCursor(0,1);
+	if (flame_val < FLAME_TOL) {
+		lMotor->drive(0);
+		rMotor->drive(0);
+		lcd.setCursor(0, 1);
 		lcd.print("see fire");
-		cur_state=see_fire;
+		cur_state = see_fire;
 	}
 }
 
+void run_fan() {
+	esc.write(100);
+	delay(3000); //wait to put out the fire
+	esc.write(0);
+	rotate = false;
+}
+//the maximum range is 27"
 void extinguish_flame() {
 	analogWrite(Z_ROT, 0); //stop the z rotation
-	yServo.write(140);
-	int flame_val=analogRead(FLAME);
-	bool done = false;
+	yServo.write(70);
+	int flame_val = analogRead(FLAME);
+	bool done = false, found = false;
 	while (!done) {
-		flame_val=analogRead(FLAME);
-		yServo.write(yServo.read() - 1);
-		lcd.setCursor(0,0);
+		flame_val = analogRead(FLAME);
+		yServo.write(yServo.read() + 1);
+		lcd.setCursor(0, 0);
 		lcd.clear();
 		lcd.print(flame_val);
 		//Serial.println(analogRead(FLAME));
-		if (flame_val< 100) {
-			lcd.setCursor(0,1);
+		if (flame_val < 200) {
+			lcd.setCursor(0, 1);
 			lcd.print("extinguishing");
+			found = true;
+			done = true;
+		}
+		if (yServo.read() > 140) { //check that limit if its too low
 			done = true;
 		}
 		delay(100);
 	}
-	esc.write(80);
-	delay(3000); //wait to put out the fire
-	esc.write(0);
-	rotate = false;
-	cur_state=await;
+	if (found) {
+		yServo.write(yServo.read() + 5);
+		run_fan();
+		cur_state = await;
+	} else {
+		cur_state = move_to_fire;
+	}
 }
 
 void loop() {
@@ -187,12 +207,13 @@ void loop() {
 //	Serial.print(event.orientation.z, 4);
 //	Serial.print(" ");
 //	//delay(50);
-//	Serial.print("sonar f: ");
-//	Serial.print(sonar_f.ping_in());
-//	Serial.print("in ");
-//	delay(20);
+	Serial.print("sonar f: ");
+	Serial.print(sonar_f.ping_in());
+	Serial.println("in ");
+	delay(20);
 //	Serial.print("sonar r: ");
-//	Serial.print(sonar_r.ping_in()); //ensure that the ping times are ample for these
+//	Serial.println(sonar_r.ping_in()); //ensure that the ping times are ample for these
+//	delay(20);
 //	Serial.print("in ");
 //	Serial.print("flame: ");
 //	Serial.print(analogRead(FLAME));
@@ -204,101 +225,103 @@ void loop() {
 //	Serial.print(analogRead(FRONT_LINE));
 //	Serial.println("");
 //	delay(100);
-	pan_fan();
+	//pan_fan();
 
-	switch(cur_state){
-	case straight:{
+	switch (cur_state) {
+	case straight: {
 		drive_straight();
 		Serial.print(" sonar right: ");
 		lcd.clear();
 		lcd.print("straight");
-		char heading[4];
-		int rel_heading=sonar_r.ping_in();
-		sprintf(heading, "%d", rel_heading);
-		lcd.print(heading);
-		Serial.println(sonar_r.ping_in());
-		if(sonar_f.ping_in()<9){
-			cur_state=go_left;
+		int right_dist = sonar_r.ping_in();
+		int front_dist = sonar_f.ping_in();
+		char buffer[4];
+		sprintf(buffer, "%d", right_dist);
+		lcd.print(buffer);
+		delay(10);
+		if (front_dist < 9) {
+			cur_state = go_left;
 		}
-		if(sonar_r.ping_in()<WALL_TOL){
-			lcd.setCursor(0,1);
+		if (right_dist < WALL_TOL) {
+			lcd.setCursor(0, 1);
 			lcd.print("r close");
 			lMotor->drive(TURN_SPEED);
 			rMotor->drive(RIGHT_CORRECT);
 		}
-		if(sonar_r.ping_in()>7&&sonar_r.ping_in()<12){
-			lcd.setCursor(0,1);
+		if (right_dist > 7 && right_dist < 12) {
+			lcd.setCursor(0, 1);
 			lcd.print("l close");
 			lMotor->drive(LEFT_CORRECT);
 			rMotor->drive(TURN_SPEED);
 		}
-		if(sonar_r.ping_in()>=18){
-			cur_state=go_right;
+		if (right_dist >= 18) {
+			cur_state = go_right;
 		}
 		break;
 	}
-	case go_left:{
+	case go_left: {
 		decrease_setpoint();
-		cur_state=left;
+		cur_state = left;
 		break;
 	}
-	case go_right:{
+	case go_right: {
 		lMotor->drive(TURN_SPEED);
 		rMotor->drive(TURN_SPEED);
-		delay(1000);
+		delay(1500);
 		increase_setpoint();
-		cur_state=right;
+		cur_state = right;
 		break;
 	}
-	case left:{
-		if(turn_left()){
-			cur_state=straight;
+	case left: {
+		if (turn_left()) {
+			cur_state = straight;
 		}
 		break;
 	}
-	case right:{
-		lcd.setCursor(0,1);
+	case right: {
+		lcd.setCursor(0, 1);
 		lcd.print("t-right");
-		if(turn_right()){
-			dead_straight_time=millis()+3000;
-			cur_state=dead_straight;
+		if (turn_right()) {
+			dead_straight_time = millis() + 1500;
+			cur_state = dead_straight;
 			Serial.println("we;ve turned");
 			lcd.print("done t");
 		}
 		break;
 	}
-	case dead_straight:{
-		lcd.setCursor(0,0);
+	case dead_straight: {
+		lcd.setCursor(0, 0);
 		char heading[4];
 		char setpoint[4];
-		int rel_heading = (int)get_relative_heading();
+		int rel_heading = (int) get_relative_heading();
 		lcd.clear();
-		lcd.setCursor(0,0);
+		lcd.setCursor(0, 0);
 		sprintf(heading, "%d", rel_heading);
 		lcd.print(heading);
-		int int_set_point=(int) set_point;
-		lcd.setCursor(0,1);
-		sprintf(setpoint, " s:%d",int_set_point);
+		int int_set_point = (int) set_point;
+		lcd.setCursor(0, 1);
+		sprintf(setpoint, " s:%d", int_set_point);
 		lcd.print(setpoint);
-		if(millis()<dead_straight_time){
+		if (millis() < dead_straight_time) {
 			drive_straight();
-		}
-		else{
-			cur_state=straight;
+		} else {
+			cur_state = straight;
 		}
 		break;
 	}
-	case see_fire:{
+	case see_fire: {
+		lMotor->drive(0);
+		rMotor->drive(0);
 		Serial.println("sees fire");
 		extinguish_flame();
 		break;
 	}
-	case init_await:{
+	case init_await: {
 		increase_setpoint();
-		cur_state=await;
+		cur_state = await;
 		break;
 	}
-	case await:{
+	case await: {
 //		drive_straight();
 //		char heading[4];
 //		char setpoint[4];
@@ -311,13 +334,58 @@ void loop() {
 //		lcd.setCursor(0,1);
 //		sprintf(setpoint, " s:%d",int_set_point);
 //		lcd.print(setpoint);
-		//Serial.println(get_relative_heading(),4);
-		//delay(100);
+//		esc.write(100);
+//		lcd.clear();
+//		lcd.setCursor(0, 0);
+//		int flame_val = analogRead(FLAME);
+//		lcd.print(flame_val);
+//		int sonar = sonar_f.ping_in();
+//		lcd.setCursor(0, 1);
+//		lcd.print(sonar);
+//		delay(100);
+		break;
+	}
+	case test: {
+		pan_fan();
 		break;
 	}
 	}
-	delay(10);
+	delay(30);
 
+}
+//returns true when done
+bool turn_to_angle(float des_angle) {
+	float relative_heading = get_relative_heading();
+	if (des_angle == 0) {
+		if (relative_heading <= 180 && relative_heading != 0) {
+			lMotor->drive(-TURN_SPEED);
+			rMotor->drive(TURN_SPEED);
+			Serial.println("rotating left");
+		} else if (relative_heading > 180) {
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(-TURN_SPEED);
+			Serial.println("rotating right");
+		} else if(abs(relative_heading - des_angle)<2) {
+			lMotor->drive(0);
+			rMotor->drive(0);
+			return true;
+		}
+	} else {
+		if (relative_heading < des_angle) {
+			lMotor->drive(TURN_SPEED);
+			rMotor->drive(-TURN_SPEED);
+			Serial.println("rotating right");
+		} else if (relative_heading > des_angle) {
+			lMotor->drive(-TURN_SPEED);
+			rMotor->drive(TURN_SPEED);
+			Serial.println("rotating left");
+		} else if(abs(relative_heading - des_angle)<2){
+			lMotor->drive(0);
+			rMotor->drive(0);
+			return true;
+		}
+	}
+	return false;
 }
 void drive_straight() {
 	float relative_heading = get_relative_heading();
@@ -328,34 +396,29 @@ void drive_straight() {
 	Serial.print(relative_heading);
 	Serial.print(" error: ");
 	Serial.println(abs(relative_heading - set_point), 4);
-	if(set_point==0){
-		if(relative_heading<=180&&relative_heading!=0){
+	if (set_point == 0) {
+		if (relative_heading <= 180 && relative_heading != 0) {
 			lMotor->drive(TURN_SPEED);
-			rMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+			rMotor->drive(TURN_SPEED + CORRECTION_SPEED);
 			Serial.println("rotating left");
-		}
-		else if(relative_heading>180){
-			lMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+		} else if (relative_heading > 180) {
+			lMotor->drive(TURN_SPEED + CORRECTION_SPEED);
 			rMotor->drive(TURN_SPEED);
 			Serial.println("rotating right");
-		}
-		else{
+		} else {
 			lMotor->drive(TURN_SPEED);
 			rMotor->drive(TURN_SPEED);
 		}
-	}
-	else{
-		if(relative_heading<set_point){
-			lMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+	} else {
+		if (relative_heading < set_point) {
+			lMotor->drive(TURN_SPEED + CORRECTION_SPEED);
 			rMotor->drive(TURN_SPEED);
 			Serial.println("rotating right");
-		}
-		else if(relative_heading>set_point){
+		} else if (relative_heading > set_point) {
 			lMotor->drive(TURN_SPEED);
-			rMotor->drive(TURN_SPEED+CORRECTION_SPEED);
+			rMotor->drive(TURN_SPEED + CORRECTION_SPEED);
 			Serial.println("rotating left");
-		}
-		else{
+		} else {
 			lMotor->drive(TURN_SPEED);
 			rMotor->drive(TURN_SPEED);
 		}
@@ -363,32 +426,31 @@ void drive_straight() {
 
 }
 //increases setpoint by 90 and wraps around to 0
-void increase_setpoint(){
-	if(set_point>=270){
-		set_point=0;
+void increase_setpoint() {
+	if (set_point >= 270) {
+		set_point = 0;
 		return;
-	}
-	else{
-		set_point+=90;
+	} else {
+		set_point += 90;
 	}
 }
 //decreases setpoint by 90 and wraps around to 270
-void decrease_setpoint(){
-	if(set_point==0){
-		set_point=270;
+void decrease_setpoint() {
+	if (set_point == 0) {
+		set_point = 270;
 		return;
 	}
-	set_point-=90;
+	set_point -= 90;
 }
 
- float get_relative_heading(){
-	  sensors_event_t event;
-	  bno.getEvent(&event);
-	  float abs_heading=event.orientation.x;
-	if(abs_heading>=offset){
-		return abs_heading-offset;
+float get_relative_heading() {
+	sensors_event_t event;
+	bno.getEvent(&event);
+	float abs_heading = event.orientation.x;
+	if (abs_heading >= offset) {
+		return abs_heading - offset;
 	}
-	return abs_heading-offset+360.0;
+	return abs_heading - offset + 360.0;
 }
 
 bool turn_left() {
@@ -411,7 +473,7 @@ bool turn_left() {
 	rMotor->drive(TURN_SPEED);
 	return false;
 }
-bool turn_right(){
+bool turn_right() {
 	float relative_heading = get_relative_heading();
 	const float allowable_error = 5; //may need to be 5
 	Serial.print("setpoint: ");
@@ -430,5 +492,4 @@ bool turn_right(){
 	rMotor->drive(-TURN_SPEED);
 	return false;
 }
-
 

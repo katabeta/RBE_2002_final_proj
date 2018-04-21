@@ -15,8 +15,10 @@ enum state{
 	left,
 	right,
 	see_fire,
+	move_to_fire,
 	init_await,
-	await
+	await,
+	test
 };
 typedef enum state state;
 

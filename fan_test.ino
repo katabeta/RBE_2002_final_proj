@@ -28,8 +28,7 @@
 #define MIN_Z 350
 ////// FIRE //////
 #define FLAME 3
-#define LOW_TOL 750
-#define FLAME_TOL 700
+#define FLAME_TOL 200
 ////// DRIVING //////
 #define WALL_TOL 4
 #define TURN_SPEED .2
@@ -63,13 +62,15 @@ Servo esc, yServo;
 
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
-bool rotate = true, increasing = true;
-bool found_flame=false;
+bool rotate, increasing;
+bool found_flame;
 //nav variables
 float set_point;
 float offset;
 unsigned long dead_straight_time;
 float des_angle;
+//detection variables
+int ambient_val, failure_count;
 //state machine
 state cur_state;
 
@@ -123,8 +124,13 @@ void setup() {
 		offset = event.orientation.x;
 		delay(100);
 	}
+	//adjust rotate to enable/disable the fan
+	rotate = true, increasing = true;
+	found_flame=false;
 	set_point = 0;
-	cur_state = await;
+	ambient_val=analogRead(FLAME);
+	cur_state = straight;
+	failure_count=0;
 }
 
 void pan_fan() {
@@ -139,13 +145,15 @@ void pan_fan() {
 		analogWrite(Z_ROT, 200);     //turn right uncomment for analog
 		Serial.println(" decreasing");
 	}
-
+	if(!rotate){
+		analogWrite(Z_ROT, 0);
+	}
 	if (z_rot_val >= MAX_Z) {
 		increasing = false;
 	} else if (z_rot_val <= MIN_Z) {
 		increasing = true;
 	}
-	if ((flame_val < FLAME_TOL)&&!found_flame) {
+	if ((ambient_val-flame_val > FLAME_TOL)&&!found_flame) {
 		found_flame=true;
 		rotate=false;
 		analogWrite(Z_ROT, 0);
@@ -155,18 +163,20 @@ void pan_fan() {
 		lcd.print("see fire");
 		Serial.println("rotating to fire");
 		//has the base rotate to the angle of the turret
+		//change back to init_rotate_to_fire
 		cur_state = init_rotate_to_fire;
 	}
-	else if((flame_val < FLAME_TOL)&&found_flame) {//this occurs after the flame has been found firs time
-		analogWrite(Z_ROT, 0);
-		rotate=false;
-		cur_state=see_fire;
-	}
+//	else if(rotate&&(ambient_val-flame_val > FLAME_TOL*1.5)&&found_flame) {//this occurs after the flame has been found firs time
+//		analogWrite(Z_ROT, 0);
+//		rotate=false;
+//		//change back to see_fire
+//		cur_state=see_fire;
+//	}
 }
 
 void run_fan() {
 	esc.write(100);
-	delay(3000); //wait to put out the fire
+	delay(3000+failure_count*1000); //wait to put out the fire
 	esc.write(0);
 	rotate = false;
 }
@@ -175,38 +185,45 @@ void extinguish_flame() {
 
 	yServo.write(55);
 	int flame_val = analogRead(FLAME);
-	bool done = false, found = false;
+	bool done = false;
 	if (sonar_f.ping_in() < 18) {
 		lMotor->drive(0);
 		rMotor->drive(0);
 		analogWrite(Z_ROT, 0);
+		esc.write(100);
 		while (!done) {
-			flame_val = analogRead(FLAME);
 			yServo.write(yServo.read() + 1);
 			lcd.setCursor(0, 0);
 			lcd.clear();
 			lcd.print(flame_val);
 			//Serial.println(analogRead(FLAME));
-			if (flame_val < 400) {
-				lcd.setCursor(0, 1);
-				lcd.print("extinguishing");
-				found = true;
+//			if (ambient_val-flame_val > FLAME_TOL) {
+//				lcd.setCursor(0, 1);
+//				lcd.print("extinguishing");
+//				done = true;
+//			}
+			if (yServo.read() > 100) { //check that limit if its too low
 				done = true;
 			}
-			if (yServo.read() > 140) { //check that limit if its too low
-				done = true;
-			}
-			delay(100);
+			delay(300+10*failure_count);
 		}
-		if (found) {
-			rotate=false;
-			run_fan();
+		yServo.write(70);
+		esc.write(0);
+		//run_fan();
+		lcd.clear();
+		lcd.setCursor(0,1);
+		lcd.print("check done?");
+		delay(1000);
+		if(analogRead(FLAME)>ambient_val){
 			cur_state=await;
+		}
+		else{
+			cur_state=see_fire;
+			failure_count++;
 		}
 	}
 	else{
 		//if we're too far move closer
-		set_point=des_angle;
 		drive_straight();
 	}
 }
@@ -250,6 +267,9 @@ void loop() {
 	lcd.print(cur_state);
 	switch (cur_state) {
 	case straight: {
+		//TODO check for cliffs
+		//TODO track the distance
+		rotate=true;
 		drive_straight();
 		Serial.print(" sonar right: ");
 		lcd.clear();
@@ -281,11 +301,15 @@ void loop() {
 		break;
 	}
 	case go_left: {
+		rotate=false;
+		analogWrite(Z_ROT,0);
 		decrease_setpoint();
 		cur_state = left;
 		break;
 	}
 	case go_right: {
+		analogWrite(Z_ROT,0);
+		rotate=false;
 		lMotor->drive(TURN_SPEED);
 		rMotor->drive(TURN_SPEED);
 		delay(1500);
@@ -296,6 +320,7 @@ void loop() {
 	case left: {
 		if (turn_left()) {
 			cur_state = straight;
+			rotate=true;
 		}
 		break;
 	}
@@ -307,6 +332,7 @@ void loop() {
 			cur_state = dead_straight;
 			Serial.println("we;ve turned");
 			lcd.print("done t");
+			rotate=true;
 		}
 		break;
 	}
@@ -332,7 +358,16 @@ void loop() {
 	}
 	case init_rotate_to_fire: {
 		des_angle = get_relative_heading() + get_abs_turret_angle();
+		if(des_angle<0){
+			des_angle+=360;
+		}
+		if(des_angle>=360){
+			des_angle-=360;
+		}
+		set_point=des_angle;
 		cur_state = rotate_to_fire;
+		lMotor->drive(0);
+		rMotor->drive(0);
 		break;
 	}
 	case rotate_to_fire: {
@@ -344,14 +379,23 @@ void loop() {
 		int heading = (int) get_relative_heading();
 		lcd.print(heading);
 		if (turn_to_angle(des_angle)) {
-			rotate=true;
+			cur_state=reset_turret;
+			set_point=des_angle;
+		}
+		break;
+	}
+	case reset_turret:{
+		if(turret_to_zero()){
+			cur_state=see_fire;
 		}
 		break;
 	}
 	case see_fire: {
+		rotate=false;
 		lMotor->drive(0);
 		rMotor->drive(0);
 		Serial.println("sees fire");
+		//TODO make sure it moves to the flame
 		extinguish_flame();
 		break;
 	}
@@ -392,19 +436,39 @@ void loop() {
 		break;
 	}
 	case init_test:{
-		des_angle=get_relative_heading()+get_abs_turret_angle();
-		cur_state=test;
+		increase_setpoint();
+		cur_state=init_test_2;
+		break;
+	}
+	case init_test_2: {
+//		if (turn_right()) {
+//			des_angle = get_relative_heading() + get_abs_turret_angle();
+//			if (des_angle < 0) {
+//				des_angle += 360;
+//			}
+//			if (des_angle >= 360) {
+//				des_angle -= 360;
+//			}
+//			cur_state = test;
+//		}
+		if(turn_to_angle(300)){
+			set_point=300;
+			cur_state=test;
+		}
 		break;
 	}
 	case test: {
-		int rot=get_abs_turret_angle();
+//		int rot=analogRead(Z_ROT_POT);
+//		lcd.clear();
+//		lcd.setCursor(0,0);
+//		lcd.print("f: ");
+//		lcd.print(rot);
 		lcd.clear();
-		lcd.setCursor(0,0);
+		lcd.setCursor(0, 1);
+		int rot = get_abs_turret_angle();
 		lcd.print(rot);
-		lcd.setCursor(0,5);
-		int heading = (int) get_relative_heading();
-		lcd.print(heading);
-		if(turn_to_angle(des_angle)){
+		rotate=false;
+		if(turret_to_zero()){
 			cur_state=await;
 		}
 		break;
@@ -413,16 +477,25 @@ void loop() {
 	delay(30);
 
 }
+bool turret_to_zero(){
+	float turret_angle=get_abs_turret_angle();
+	if(abs(turret_angle)<2){
+		return true;
+	}
+	if(turret_angle>0){
+		analogWrite(Z_ROT, 200);
+	}
+	else{
+		analogWrite(Z_ROT, 105);
+	}
+	return false;
+}
 //returns true when done
 bool turn_to_angle(float des_angle) {
-	//TODO figure out left turn and negative angles
-	if(des_angle<0){
-		des_angle+=360;
-	}
 	float relative_heading = get_relative_heading();
 	int turret_angle=get_abs_turret_angle();
 	float error=abs(relative_heading-des_angle);
-	if(error<10){//this is the tolerance
+	if(error<5){//this is the tolerance
 		//this renables to rotation to find the flame again
 		rotate=true;
 		lMotor->drive(0);
@@ -437,40 +510,9 @@ bool turn_to_angle(float des_angle) {
 		lMotor->drive(TURN_SPEED);
 		rMotor->drive(-TURN_SPEED);
 	}
-	else{ //this renables to rotation to find the flame again
-		return true;
-	}
-//	if (des_angle == 0) {
-//		if (relative_heading <= 180 && relative_heading != 0) {
-//			lMotor->drive(-TURN_SPEED);
-//			rMotor->drive(TURN_SPEED);
-//			Serial.println("rotating left");
-//		} else if (relative_heading > 180) {
-//			lMotor->drive(TURN_SPEED);
-//			rMotor->drive(-TURN_SPEED);
-//			Serial.println("rotating right");
-//		} else if(abs(relative_heading - des_angle)<2) {
-//			lMotor->drive(0);
-//			rMotor->drive(0);
-//			return true;
-//		}
-//	} else {
-//		if (relative_heading < des_angle) {
-//			lMotor->drive(TURN_SPEED);
-//			rMotor->drive(-TURN_SPEED);
-//			Serial.println("rotating right");
-//		} else if (relative_heading > des_angle) {
-//			lMotor->drive(-TURN_SPEED);
-//			rMotor->drive(TURN_SPEED);
-//			Serial.println("rotating left");
-//		} else if(abs(relative_heading - des_angle)<2){
-//			lMotor->drive(0);
-//			rMotor->drive(0);
-//			return true;
-//		}
-//	}
 	return false;
 }
+
 void drive_straight() {
 	float relative_heading = get_relative_heading();
 	const float allowable_error = 3; //may need to be 5

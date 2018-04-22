@@ -17,10 +17,12 @@ enum state{
 	see_fire,
 	init_rotate_to_fire,
 	rotate_to_fire,
+	reset_turret,
 	move_to_fire,
 	init_await,
 	await,
 	init_test,
+	init_test_2,
 	test
 };
 typedef enum state state;
@@ -34,5 +36,6 @@ bool turn_left();
 float get_relative_heading();
 float get_abs_turret_angle();
 bool turn_to_angle(float des_angle);
+bool turret_to_zero();
 
 #endif /* NAV_STATES_H_ */

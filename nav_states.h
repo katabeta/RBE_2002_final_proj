@@ -15,13 +15,17 @@ enum state{
 	left,
 	right,
 	see_fire,
+	init_rotate_to_fire,
+	rotate_to_fire,
 	move_to_fire,
 	init_await,
 	await,
+	init_test,
 	test
 };
 typedef enum state state;
-
+void pan_fan();
+void extinguish_flame();
 void drive_straight();
 void decrease_setpoint();
 void increase_setpoint();

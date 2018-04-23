@@ -37,5 +37,7 @@ float get_relative_heading();
 float get_abs_turret_angle();
 bool turn_to_angle(float des_angle);
 bool turret_to_zero();
-
+void update_r_enc();
+void update_l_enc();
+void calc_displacement();
 #endif /* NAV_STATES_H_ */

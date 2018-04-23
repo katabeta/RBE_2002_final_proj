@@ -8,7 +8,7 @@
 #include <LiquidCrystal.h>
 
 #include "nav_states.h"
-
+#include "Encoder.h"
 /////// Sonar //////
 #define TRIGGER_PIN  23
 #define ECHO_PIN     24
@@ -34,6 +34,7 @@
 #define TURN_SPEED .2
 #define STRAIGHT_SPEED .2
 #define CORRECTION_SPEED .13
+/////DISPLACEMENT/////
 
 namespace {
 
@@ -76,7 +77,10 @@ state cur_state;
 
 const int rs = 40, en = 41, d4 = 37, d5 = 35, d6 = 33, d7 = 31;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-
+//location finder
+Encoder rEnc(3);
+Encoder lEnc(18);
+float x_disp, y_disp;
 void setup() {
 
 	Serial.begin(9600);
@@ -92,6 +96,12 @@ void setup() {
 	pinMode(FLAME, INPUT);
 	pinMode(FRONT_LINE, INPUT);
 	pinMode(RIGHT_LINE, INPUT);
+	pinMode(2, INPUT);
+	pinMode(3, INPUT);
+	pinMode(rEnc.getPort(), INPUT);
+	pinMode(lEnc.getPort(), INPUT);
+	attachInterrupt(digitalPinToInterrupt(rEnc.getPort()), update_r_enc, RISING);
+	attachInterrupt(digitalPinToInterrupt(lEnc.getPort()), update_l_enc, RISING);
 	// Attach the the servo to the correct pin and set the pulse range
 	esc.attach(escPin, 1000, 2000);
 	yServo.attach(Y_ROT);
@@ -125,14 +135,58 @@ void setup() {
 		delay(100);
 	}
 	//adjust rotate to enable/disable the fan
-	rotate = true, increasing = true;
+	rotate = false, increasing = true;
 	found_flame=false;
 	set_point = 0;
 	ambient_val=analogRead(FLAME);
 	cur_state = straight;
 	failure_count=0;
+	rEnc.resetCount();
+	lEnc.resetCount();
+	x_disp=y_disp=0;
 }
+void update_r_enc(){
+	rEnc.incrementCount();
+}
+void update_l_enc(){
+	lEnc.incrementCount();
+}
+void calc_displacement() {
+	Serial.println("calculating disp");
+	float r_inches, l_inches;
 
+	r_inches = rEnc.getInches();
+	l_inches = lEnc.getInches();
+	Serial.print("r: ");
+	Serial.print(r_inches);
+	Serial.print(" l: ");
+	Serial.print(l_inches);
+	if(set_point==0.0){
+		x_disp+=(r_inches+l_inches)/2.0;
+	}
+	else if(set_point==90.0){
+		y_disp+=(r_inches+l_inches)/2.0;
+	}
+	else if(set_point==180.0){
+		x_disp-=(r_inches+l_inches)/2.0;
+	}
+	else if(set_point==270.0){
+		y_disp-=(r_inches+l_inches)/2.0;
+	}
+	rEnc.resetCount();
+	lEnc.resetCount();
+	lcd.clear();
+	lcd.setCursor(0, 0);
+	int x = (int) x_disp;
+	int y = (int) y_disp;
+	lcd.print("x:");
+	lcd.print(x);
+	lcd.setCursor(6, 0);
+	lcd.print("y:");
+	lcd.print(y);
+	lcd.setCursor(0,1);
+	lcd.print((int)set_point);
+}
 void pan_fan() {
 	int flame_val = analogRead(FLAME);
 	int z_rot_val = analogRead(Z_ROT_POT);
@@ -231,11 +285,9 @@ void extinguish_flame() {
 void loop() {
 
 	// Wait for some input
-//	rMotor->drive(0);
-//	lMotor->drive(0);
 //	sensors_event_t event;
 //	bno.getEvent(&event);
-//	/* Display the floating point data */
+	/* Display the floating point data */
 //	Serial.print("X: ");
 //	Serial.print(event.orientation.x, 4);
 //	Serial.print(" Y: ");
@@ -243,11 +295,11 @@ void loop() {
 //	Serial.print(" Z: ");
 //	Serial.print(event.orientation.z, 4);
 //	Serial.print(" ");
-//	//delay(50);
-	Serial.print("sonar f: ");
-	Serial.print(sonar_f.ping_in());
-	Serial.println("in ");
-	delay(20);
+	//delay(50);
+//	Serial.print("sonar f: ");
+//	Serial.print(sonar_f.ping_in());
+//	Serial.println("in ");
+//	delay(20);
 //	Serial.print("sonar r: ");
 //	Serial.println(sonar_r.ping_in()); //ensure that the ping times are ample for these
 //	delay(20);
@@ -261,10 +313,9 @@ void loop() {
 //	Serial.print(" front line: ");
 //	Serial.print(analogRead(FRONT_LINE));
 //	Serial.println("");
-//	delay(100);
+
+
 	pan_fan();
-	lcd.setCursor(6,0);
-	lcd.print(cur_state);
 	switch (cur_state) {
 	case straight: {
 		//TODO check for cliffs
@@ -272,13 +323,13 @@ void loop() {
 		rotate=true;
 		drive_straight();
 		Serial.print(" sonar right: ");
-		lcd.clear();
-		lcd.print("straight");
+//		lcd.clear();
+//		lcd.print("straight");
 		int right_dist = sonar_r.ping_in();
 		int front_dist = sonar_f.ping_in();
-		char buffer[4];
-		sprintf(buffer, "%d", right_dist);
-		lcd.print(buffer);
+//		char buffer[4];
+//		sprintf(buffer, "%d", right_dist);
+//		lcd.print(buffer);
 		delay(10);
 		if (front_dist < 9) {
 			cur_state = go_left;
@@ -301,6 +352,8 @@ void loop() {
 		break;
 	}
 	case go_left: {
+		//this must occur before the setpoint is changed
+		calc_displacement();
 		rotate=false;
 		analogWrite(Z_ROT,0);
 		decrease_setpoint();
@@ -308,6 +361,8 @@ void loop() {
 		break;
 	}
 	case go_right: {
+		//this must occur before the setpoint is changed
+		calc_displacement();
 		analogWrite(Z_ROT,0);
 		rotate=false;
 		lMotor->drive(TURN_SPEED);
@@ -426,13 +481,15 @@ void loop() {
 //		lcd.setCursor(0, 1);
 //		lcd.print(sonar);
 //		delay(100);
-		lMotor->drive(0);
-		rMotor->drive(0);
-		int rot = sonar_f.ping_in();
+//		lMotor->drive(0);
+//		rMotor->drive(0);
+//		int rot = sonar_f.ping_in();
 		lcd.clear();
-		lcd.setCursor(0, 1);
-		lcd.print(rot);
-
+		lcd.setCursor(0, 0);
+		lcd.print("x:");
+		lcd.print("37");
+		lcd.print("y:");
+		lcd.print("7");
 		break;
 	}
 	case init_test:{
@@ -463,14 +520,11 @@ void loop() {
 //		lcd.setCursor(0,0);
 //		lcd.print("f: ");
 //		lcd.print(rot);
-		lcd.clear();
-		lcd.setCursor(0, 1);
-		int rot = get_abs_turret_angle();
-		lcd.print(rot);
+
 		rotate=false;
-		if(turret_to_zero()){
-			cur_state=await;
-		}
+//		if(turret_to_zero()){
+//			cur_state=await;
+//		}
 		break;
 	}
 	}

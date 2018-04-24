@@ -19,7 +19,7 @@
 #define FRONT_LINE 1
 #define RIGHT_LINE 2
 ////// Fan //////
-#define Z_ROT_POT 0
+#define Z_ROT_POT 4
 #define Z_ROT 9
 #define Y_ROT 10
 //does a 120 degree sweep
@@ -106,7 +106,7 @@ void setup() {
 	esc.attach(escPin, 1000, 2000);
 	yServo.attach(Y_ROT);
 	esc.write(0); //put the throttle to off
-	yServo.write(80);
+	yServo.write(100);
 	Serial.println("starting");
 	delay(1000); //let it register
 	Serial.println("fan should be beeping");
@@ -266,7 +266,7 @@ void extinguish_flame() {
 			}
 			delay(300+10*failure_count);
 		}
-		yServo.write(70);
+		yServo.write(90);
 		esc.write(0);
 		//run_fan();
 		lcd.clear();
@@ -274,6 +274,10 @@ void extinguish_flame() {
 		lcd.print("check done?");
 		delay(1000);
 		if(analogRead(FLAME)>ambient_val){
+			x_disp+=rEnc.getInches()*cos(get_relative_heading()*PI/180.0);
+			y_disp+=rEnc.getInches()*cos(get_relative_heading()*PI/180.0);
+			rEnc.resetCount();
+			lEnc.resetCount();
 			cur_state=await;
 		}
 		else{
@@ -311,19 +315,17 @@ void loop() {
 //	Serial.print("in ");
 //	Serial.print("flame: ");
 //	Serial.print(analogRead(FLAME));
-	Serial.print(" f-rot: ");
-	Serial.println(analogRead(Z_ROT_POT));
-	Serial.print(" turret_angle: ");
-	Serial.println(get_abs_turret_angle());
+//	Serial.print(" f-rot: ");
+//	Serial.println(analogRead(Z_ROT_POT));
+//	Serial.print(" turret_angle: ");
+//	Serial.println(get_abs_turret_angle());
 //	Serial.print(" right line: ");
 //	Serial.print(analogRead(RIGHT_LINE));
 //	Serial.print(" front line: ");
 //	Serial.print(analogRead(FRONT_LINE));
 //	Serial.println("");
-
-	Serial.print("l: ");
-	Serial.println(lEnc.getInches());
-	pan_fan();
+	pan_fan(); //MAKE SURE THIS IS
+	//UNCOMMENTED
 	switch (cur_state) {
 	case straight: {
 		//TODO check for cliffs
@@ -460,15 +462,18 @@ void loop() {
 		break;
 	}
 	case reset_turret:{
+		rotate=false;
 		if(turret_to_zero()){
+			rEnc.resetCount();
+			lEnc.resetCount();
 			cur_state=see_fire;
 		}
 		break;
 	}
 	case see_fire: {
 		rotate=false;
-		lMotor->drive(0);
-		rMotor->drive(0);
+//		lMotor->drive(0);
+//		rMotor->drive(0);
 		Serial.println("sees fire");
 		//TODO make sure it moves to the flame
 		extinguish_flame();
@@ -494,7 +499,7 @@ void loop() {
 //		lcd.print(setpoint);
 //		esc.write(100);
 //		lcd.clear();
-//		lcd.setCursor(0, 0);
+
 //		int flame_val = analogRead(FLAME);
 //		lcd.print(flame_val);
 //		int sonar = sonar_f.ping_in();
@@ -503,14 +508,15 @@ void loop() {
 //		delay(100);
 //		lMotor->drive(0);
 //		rMotor->drive(0);
-//		int rot = sonar_f.ping_in();
-
+		int dist = sonar_f.ping_in();
+		y_disp+=(float)dist*sin(get_relative_heading()*PI/180.0);
+		x_disp+=(float)dist*cos(get_relative_heading()*PI/180.0);
 		lcd.clear();
 		lcd.setCursor(0, 0);
-		lcd.print("x:");
-		lcd.print(x_disp);
 		lcd.print("y:");
 		lcd.print(y_disp);
+		lcd.print("x:");
+		lcd.print(x_disp);
 
 		break;
 	}
@@ -555,6 +561,9 @@ void loop() {
 		lcd.print("y:");
 		lcd.print(y_loc);
 		rotate=false;
+		if(turret_to_zero()){
+			cur_state=await;
+		}
 //		if(turret_to_zero()){
 //			cur_state=await;
 //		}
@@ -566,7 +575,8 @@ void loop() {
 }
 bool turret_to_zero(){
 	float turret_angle=get_abs_turret_angle();
-	if(abs(turret_angle)<2){
+	if(abs(turret_angle)<1){
+		analogWrite(Z_ROT, 0);
 		return true;
 	}
 	if(turret_angle>0){

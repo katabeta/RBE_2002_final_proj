@@ -71,7 +71,7 @@ float offset;
 unsigned long dead_straight_time;
 float des_angle;
 //detection variables
-int ambient_val, failure_count;
+int ambient_val, failure_count, zero_point;
 //state machine
 state cur_state;
 
@@ -135,12 +135,13 @@ void setup() {
 		delay(100);
 	}
 	//adjust rotate to enable/disable the fan
-	rotate = false, increasing = true;
+	rotate = true, increasing = true;
 	found_flame=false;
 	set_point = 0;
 	ambient_val=analogRead(FLAME);
 	cur_state = straight;
 	failure_count=0;
+	zero_point=500;
 	rEnc.resetCount();
 	lEnc.resetCount();
 	x_disp=y_disp=0;
@@ -173,19 +174,23 @@ void calc_displacement() {
 	else if(set_point==270.0){
 		y_disp-=(r_inches+l_inches)/2.0;
 	}
-	rEnc.resetCount();
-	lEnc.resetCount();
+
 	lcd.clear();
-	lcd.setCursor(0, 0);
 	int x = (int) x_disp;
 	int y = (int) y_disp;
+//	lcd.print("x:");
+//	lcd.print(x);
+//	lcd.setCursor(6, 0);
+//	lcd.print("y:");
+//	lcd.print(y);
+//	lcd.setCursor(0,1);
+//	lcd.print((int)set_point);
+	lcd.setCursor(0,0);
 	lcd.print("x:");
 	lcd.print(x);
-	lcd.setCursor(6, 0);
+	lcd.setCursor(0,1);
 	lcd.print("y:");
 	lcd.print(y);
-	lcd.setCursor(0,1);
-	lcd.print((int)set_point);
 }
 void pan_fan() {
 	int flame_val = analogRead(FLAME);
@@ -240,7 +245,7 @@ void extinguish_flame() {
 	yServo.write(55);
 	int flame_val = analogRead(FLAME);
 	bool done = false;
-	if (sonar_f.ping_in() < 18) {
+	if (sonar_f.ping_in() < 12) {
 		lMotor->drive(0);
 		rMotor->drive(0);
 		analogWrite(Z_ROT, 0);
@@ -306,15 +311,18 @@ void loop() {
 //	Serial.print("in ");
 //	Serial.print("flame: ");
 //	Serial.print(analogRead(FLAME));
-//	Serial.print(" f-rot: ");
-//	Serial.print(analogRead(Z_ROT_POT));
+	Serial.print(" f-rot: ");
+	Serial.println(analogRead(Z_ROT_POT));
+	Serial.print(" turret_angle: ");
+	Serial.println(get_abs_turret_angle());
 //	Serial.print(" right line: ");
 //	Serial.print(analogRead(RIGHT_LINE));
 //	Serial.print(" front line: ");
 //	Serial.print(analogRead(FRONT_LINE));
 //	Serial.println("");
 
-
+	Serial.print("l: ");
+	Serial.println(lEnc.getInches());
 	pan_fan();
 	switch (cur_state) {
 	case straight: {
@@ -375,6 +383,9 @@ void loop() {
 	case left: {
 		if (turn_left()) {
 			cur_state = straight;
+			//reset after turning left
+			rEnc.resetCount();
+			lEnc.resetCount();
 			rotate=true;
 		}
 		break;
@@ -387,6 +398,9 @@ void loop() {
 			cur_state = dead_straight;
 			Serial.println("we;ve turned");
 			lcd.print("done t");
+			//reset after turning right
+			rEnc.resetCount();
+			lEnc.resetCount();
 			rotate=true;
 		}
 		break;
@@ -434,6 +448,12 @@ void loop() {
 		int heading = (int) get_relative_heading();
 		lcd.print(heading);
 		if (turn_to_angle(des_angle)) {
+			float heading=get_relative_heading();
+			float dist=(float)sonar_f.ping_in();
+			float x_loc=dist*cos(heading);
+			float y_loc=dist*sin(heading);
+			x_disp+=x_loc;
+			y_disp+=y_loc;
 			cur_state=reset_turret;
 			set_point=des_angle;
 		}
@@ -484,12 +504,14 @@ void loop() {
 //		lMotor->drive(0);
 //		rMotor->drive(0);
 //		int rot = sonar_f.ping_in();
+
 		lcd.clear();
 		lcd.setCursor(0, 0);
 		lcd.print("x:");
-		lcd.print("37");
+		lcd.print(x_disp);
 		lcd.print("y:");
-		lcd.print("7");
+		lcd.print(y_disp);
+
 		break;
 	}
 	case init_test:{
@@ -520,7 +542,18 @@ void loop() {
 //		lcd.setCursor(0,0);
 //		lcd.print("f: ");
 //		lcd.print(rot);
-
+		lcd.clear();
+		float heading=get_relative_heading();
+		float dist=(float)sonar_f.ping_in();
+		float x_loc=dist*cos(heading);
+		float y_loc=dist*sin(heading);
+		lcd.clear();
+		lcd.setCursor(0,0);
+		lcd.print("x:");
+		lcd.print(x_loc);
+		lcd.setCursor(0,1);
+		lcd.print("y:");
+		lcd.print(y_loc);
 		rotate=false;
 //		if(turret_to_zero()){
 //			cur_state=await;
@@ -607,9 +640,8 @@ void drive_straight() {
 }
 float get_abs_turret_angle(){
 	const float tick_to_angle =.3; //this is half the range/ticks
-	const int mid_point=485;
 	int turret_pos=analogRead(Z_ROT_POT);
-	int displacement = turret_pos-mid_point;
+	int displacement = turret_pos-zero_point;
 	float angle = (float)displacement*tick_to_angle;
 	return angle;
 }

@@ -9,7 +9,7 @@
 
 #include "nav_states.h"
 #include "Encoder.h"
-#define BUTTON 53
+#define BUTTON 29
 /////// Sonar //////
 #define TRIGGER_PIN  23
 #define ECHO_PIN     24
@@ -94,6 +94,7 @@ void setup() {
 	lcd.clear();
 	delay(100);
 	// Serial.setTimeout(500);
+	//pinMode(BUTTON, INPUT_PULLUP);
 	pinMode(relay_en, OUTPUT);
 	pinMode(Z_ROT, OUTPUT); //uncommnet for analog usage
 	pinMode(FLAME, INPUT);
@@ -215,8 +216,7 @@ void pan_fan() {
 		analogWrite(Z_ROT, 0);
 		lMotor->drive(0);
 		rMotor->drive(0);
-		lcd.setCursor(0, 1);
-		lcd.print("see fire");
+
 		Serial.println("rotating to fire");
 		//has the base rotate to the angle of the turret
 		//change back to init_rotate_to_fire
@@ -302,13 +302,13 @@ void loop() {
 //	Serial.print(event.orientation.z, 4);
 //	Serial.print(" ");
 //	delay(50);
-//	Serial.print("sonar f: ");
-//	Serial.print(sonar_f.ping_in());
-//	Serial.println("in ");
-//	delay(20);
-//	Serial.print("sonar r: ");
-//	Serial.println(sonar_r.ping_in()); //ensure that the ping times are ample for these
-//	delay(20);
+	Serial.print("sonar f: ");
+	Serial.print(sonar_f.ping_in());
+	Serial.println("in ");
+	delay(20);
+	Serial.print("sonar r: ");
+	Serial.println(sonar_r.ping_in()); //ensure that the ping times are ample for these
+	delay(20);
 //	Serial.print("in ");
 //	Serial.print("flame: ");
 //	Serial.print(analogRead(FLAME));
@@ -318,23 +318,27 @@ void loop() {
 //	Serial.println(get_relative_heading());
 //	Serial.print(" turret_angle: ");
 //	Serial.println(get_abs_turret_angle());
-//	Serial.print(" right line: ");
-//	Serial.print(analogRead(RIGHT_LINE));
-//	Serial.print(" front line: ");
-//	Serial.print(analogRead(FRONT_LINE));
+	Serial.print(" right line: ");
+	Serial.print(analogRead(RIGHT_LINE));
+	Serial.print(" front line: ");
+	Serial.print(analogRead(FRONT_LINE));
+	Serial.println(cur_state);
 //	Serial.println("");
 //	lcd.clear();
 //	lcd.setCursor(0,0);
-//	lcd.print("sup fucker");
+
 //	lMotor->drive(.3);
 //	esc.write(40);
 //	rMotor->drive(.3);
 	pan_fan(); //MAKE SURE THIS IS
 	//UNCOMMENTED
 	switch (cur_state) {
-	case start:{
-
-	}
+//	case start:{
+//		if(!digitalRead(BUTTON)){
+//			cur_state=straight;
+//		}
+//		break;
+//	}
 	case straight: {
 		//TODO check for cliffs
 		//TODO track the distance
@@ -487,6 +491,7 @@ void loop() {
 	}
 	case reset_turret:{
 		rotate=false;
+
 		if(turret_to_zero()){
 			rEnc.resetCount();
 			lEnc.resetCount();
@@ -509,6 +514,8 @@ void loop() {
 		lcd.print(y_disp);
 		lcd.print("x:");
 		lcd.print(x_disp);
+		lcd.setCursor(0, 1);
+		lcd.print("see fire");
 		extinguish_flame();
 		break;
 	}

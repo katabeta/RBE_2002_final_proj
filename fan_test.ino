@@ -9,6 +9,7 @@
 
 #include "nav_states.h"
 #include "Encoder.h"
+#define BUTTON 53
 /////// Sonar //////
 #define TRIGGER_PIN  23
 #define ECHO_PIN     24
@@ -27,7 +28,7 @@
 //does a 120 degree sweep
 #define Z_RANGE 120
 #define MAX_Z 650
-#define MIN_Z 350
+#define MIN_Z 325
 ////// FIRE //////
 #define FLAME 3
 #define FLAME_TOL 400
@@ -269,7 +270,7 @@ void extinguish_flame() {
 		lcd.setCursor(0,1);
 		lcd.print("check done?");
 		delay(1000);
-		if(analogRead(FLAME)>ambient_val){
+		if(analogRead(FLAME)>600){
 			x_disp+=rEnc.getInches()*cos(get_relative_heading()*PI/180.0);
 			y_disp+=rEnc.getInches()*cos(get_relative_heading()*PI/180.0);
 			rEnc.resetCount();
@@ -331,6 +332,9 @@ void loop() {
 	pan_fan(); //MAKE SURE THIS IS
 	//UNCOMMENTED
 	switch (cur_state) {
+	case start:{
+
+	}
 	case straight: {
 		//TODO check for cliffs
 		//TODO track the distance
@@ -545,6 +549,8 @@ void loop() {
 		lcd.print(y_disp);
 		lcd.print("x:");
 		lcd.print(x_disp);
+		lcd.setCursor(0,1);
+		lcd.print("fire out");
 
 		break;
 	}

@@ -8,6 +8,7 @@
 #ifndef NAV_STATES_H_
 #define NAV_STATES_H_
 enum state{
+	start,
 	straight,
 	dead_straight,
 	go_left,

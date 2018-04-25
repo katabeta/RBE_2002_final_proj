@@ -27,6 +27,7 @@ enum state{
 };
 typedef enum state state;
 void pan_fan();
+void check_line();
 void extinguish_flame();
 void drive_straight();
 void decrease_setpoint();

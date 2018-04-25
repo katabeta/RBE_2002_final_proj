@@ -30,7 +30,7 @@
 #define MAX_Z 650
 #define MIN_Z 325
 ////// FIRE //////
-#define FLAME 3
+#define FLAME 6
 #define FLAME_TOL 400
 ////// DRIVING //////
 #define WALL_TOL 4
@@ -78,7 +78,7 @@ int ambient_val, failure_count, zero_point;
 //state machine
 state cur_state;
 
-const int rs = 40, en = 41, d4 = 37, d5 = 35, d6 = 33, d7 = 31;
+const int rs = 48, en = 29, d4 = 47, d5 = 43, d6 = 27, d7 = 45;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 //location finder
 Encoder rEnc(3);
@@ -291,41 +291,43 @@ void extinguish_flame() {
 void loop() {
 
 	// Wait for some input
-//	sensors_event_t event;
+	sensors_event_t event;
 //	bno.getEvent(&event);
 //	/* Display the floating point data */
-//	Serial.print("X: ");
-//	Serial.print(event.orientation.x, 4);
-//	Serial.print(" Y: ");
-//	Serial.print(event.orientation.y, 4);
-//	Serial.print(" Z: ");
-//	Serial.print(event.orientation.z, 4);
-//	Serial.print(" ");
-//	delay(50);
-	Serial.print("sonar f: ");
+	/*Serial.print("X: ");
+	Serial.print(event.orientation.x, 4);
+	Serial.print(" Y: ");
+	Serial.print(event.orientation.y, 4);
+	Serial.print(" Z: ");
+	Serial.print(event.orientation.z, 4);
+	Serial.print(" ");
+	delay(50);*/
+	/*Serial.print("sonar f: ");
 	Serial.print(sonar_f.ping_in());
 	Serial.println("in ");
 	delay(20);
 	Serial.print("sonar r: ");
 	Serial.println(sonar_r.ping_in()); //ensure that the ping times are ample for these
+	delay(20);*/
+	//Serial.print("in ");
+	Serial.print("flame: ");
+	Serial.print(analogRead(FLAME));
+	Serial.println();
 	delay(20);
-//	Serial.print("in ");
-//	Serial.print("flame: ");
-//	Serial.print(analogRead(FLAME));
-//	Serial.print(" f-rot: ");
-//	Serial.println((Z_ROT_POT));
-//	Serial.print(" abs rotation ");
-//	Serial.println(get_relative_heading());
-//	Serial.print(" turret_angle: ");
-//	Serial.println(get_abs_turret_angle());
+	/*Serial.print(" f-rot: ");
+	Serial.println((Z_ROT_POT));
+	Serial.print(" abs rotation ");
+	Serial.println(get_relative_heading());
+	Serial.print(" turret_angle: ");
+	Serial.println(get_abs_turret_angle());
 	Serial.print(" right line: ");
 	Serial.print(analogRead(RIGHT_LINE));
 	Serial.print(" front line: ");
 	Serial.print(analogRead(FRONT_LINE));
 	Serial.println(cur_state);
-//	Serial.println("");
-//	lcd.clear();
-//	lcd.setCursor(0,0);
+	Serial.println("");*/
+	/*lcd.clear();
+	lcd.setCursor(0,0);*/
 
 //	lMotor->drive(.3);
 //	esc.write(40);
